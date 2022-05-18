@@ -55,10 +55,40 @@ spec:
     name: build
     resources: {}
     script: |
+      buildah --storage-driver=$(params.STORAGE_DRIVER) images
       buildah --storage-driver=$(params.STORAGE_DRIVER) bud \
         $(params.BUILD_EXTRA_ARGS) --format=$(params.FORMAT) \
         --tls-verify=$(params.TLSVERIFY) --no-cache \
         -f $(params.DOCKERFILE) -t $(params.IMAGE) $(params.CONTEXT)
+      buildah --storage-driver=$(params.STORAGE_DRIVER) images
+    volumeMounts:
+    - mountPath: /var/lib/containers
+      name: varlibcontainers
+    workingDir: $(workspaces.source.path)
+  - image: $(params.BUILDER_IMAGE)
+    name: generate-sbom
+    resources: {}
+    script: |
+      # TODO generate sbom properly
+      echo "sbom" > $(workspaces.source.path)/sbom
+      cat $(workspaces.source.path)/sbom
+    volumeMounts:
+    - mountPath: /var/lib/containers
+      name: varlibcontainers
+    workingDir: $(workspaces.source.path)
+  - image: $(params.BUILDER_IMAGE)
+    name: inject-sbom
+    resources: {}
+    script: |
+      container=$(buildah from --storage-driver=$(params.STORAGE_DRIVER) --pull-never $(params.IMAGE))
+      echo $container
+      buildah --storage-driver=$(params.STORAGE_DRIVER) containers
+      ls -l $(workspaces.source.path)/sbom
+      cat $(workspaces.source.path)/sbom
+      buildah --debug --storage-driver=$(params.STORAGE_DRIVER) copy $container $(workspaces.source.path)/sbom /root/
+      buildah --storage-driver=$(params.STORAGE_DRIVER) commit $container $(params.IMAGE)
+      buildah --storage-driver=$(params.STORAGE_DRIVER) containers
+      buildah --storage-driver=$(params.STORAGE_DRIVER) images
     volumeMounts:
     - mountPath: /var/lib/containers
       name: varlibcontainers
